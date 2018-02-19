@@ -1,0 +1,515 @@
+---
+title: "BME Europa"
+author: "Gabriel Rega"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+
+```{r config}
+# Descrição ----------------------------------------------------------------
+#
+# Este arquivo puxa os dados necessários para a elaboração do BME da Europa
+#
+# Gabriel Rega (UP0Z)
+#
+#
+
+# Bibliotecas ----------------------------------------------------------------
+
+library(eurostat)
+library(scales)
+library(jsonlite)
+library(tidyverse)
+library(tibbletime)
+library(knitr)
+library(lubridate)
+
+# Definições ----------------------------------------------------------------
+
+#lct <- Sys.getlocale("LC_TIME"); Sys.setlocale("LC_TIME", "C")
+#setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+paletaPB <- c("#004165","#00B2A9","#675C53", "#008542", "#FDC82F","#006298", "#00B2A9",  "#A8B400")
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+prefixo <- function() {
+  d <- Sys.time()
+  dt <- toString (d)
+  nom <- gsub("-","",dt)
+  nom <- gsub(":","",nom)
+  nom <- gsub(" ","_",nom)
+  return(nom)
+}
+
+nom <- prefixo()
+
+```
+
+## PIB Trimestral
+
+```{r PIB}
+gdp_base <- 
+  get_eurostat("namq_10_gdp", select_time = "Q") # AVISO: essa linha demora rodar
+
+gdp_tri <-
+  gdp_base %>% 
+  as_tibble() %>% 
+  filter(s_adj == "SCA") %>% 
+  filter(unit == "CLV_PCH_PRE") %>% 
+  filter(na_item == "B1GQ") %>% 
+  filter(geo == "EA" 
+         | geo == "EU28" 
+         | geo == "FR" 
+         | geo == "DE"
+         | geo == "UK" 
+         | geo == "ES" 
+         | geo == "IT") %>% 
+  filter(time > "2016-10-01") %>% 
+  select(time, geo, values)
+
+gdp_plot <- 
+  ggplot(data=gdp_tri, aes(x=time,y=values,fill=geo)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = cbPalette) +
+  theme(legend.title=element_blank()) +
+  labs(x="",y="")+
+  coord_flip()
+
+gdp_plot
+
+gdp_table <- 
+  gdp_tri %>% 
+  spread(geo, values)
+
+kable(gdp_table,
+      format = "pandoc",
+      digits = 2, 
+      caption = "Crescimento do PIB, QoQ")
+
+gdp_cont <- 
+  gdp_base %>% 
+  as_tibble() %>% 
+  filter(unit == "CON_PPCH_SM") %>% 
+  filter(s_adj == "SCA") %>% 
+  filter(  na_item == "P3"
+         | na_item == "P3_S13"
+         | na_item == "P3_S14"
+         | na_item == "P5G"
+         | na_item == "P6"
+         | na_item == "P7") %>% 
+  filter(  geo == "EA" ) %>% 
+    #     | geo == "EU28")  %>% 
+  filter(time > "2015-10-01") %>% 
+  spread(na_item, values) %>% 
+  mutate(Consumo = P3 - P3_S13) %>%
+  select(-P3) %>% 
+  gather("na_item", "values", 5:9) %>% 
+  select(time, geo, na_item, values)
+
+cont_plot <- 
+  ggplot(data=gdp_cont, aes(x=time,y=values,fill=na_item)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = cbPalette) +
+  theme(legend.title=element_blank()) +
+  labs(x="",y="")
+  
+cont_plot
+```
+
+## Produção Industrial
+
+```{r Producao}
+ind_base <- get_eurostat("sts_inpr_m", select_time = "M") # AVISO: essa linha demora rodar
+
+ind_tab1 <- 
+  ind_base %>% 
+  filter(geo == "EU28") %>%
+  filter(unit == "PCH_SM") %>% #comparação com o mesmo mês do ano anterior
+  filter(nace_r2 == "MIG_CAG" 
+         |nace_r2 == "MIG_COG"
+         |nace_r2 == "MIG_DCOG"
+         |nace_r2 == "MIG_NDCOG"
+         |nace_r2 == "C"
+         |nace_r2 == "MIG_DCOG"
+         |nace_r2 == "MIG_NRG_X_E"
+         |nace_r2 == "B-D") %>%
+  filter(time > "2015-10-01") %>% 
+  select(time, nace_r2, values) %>% 
+  spread(nace_r2, values) %>% 
+  arrange(desc(time)) %>% 
+  head(12)
+
+kable(ind_tab1,
+      format = "pandoc",
+      digits = 2,
+      caption = "Produção Industrial, UE, Setores, Crescimento YoY")
+
+ind_tab2 <- 
+  ind_base %>% 
+  filter(geo == "EA19") %>%
+  filter(unit == "PCH_SM") %>% #comparação com o mesmo mês do ano anterior
+  filter(nace_r2 == "MIG_CAG" 
+         |nace_r2 == "MIG_COG"
+         |nace_r2 == "MIG_DCOG"
+         |nace_r2 == "MIG_NDCOG"
+         |nace_r2 == "C"
+         |nace_r2 == "MIG_DCOG"
+         |nace_r2 == "MIG_NRG_X_E"
+         |nace_r2 == "B-D") %>%
+  filter(time > "2015-10-01") %>% 
+  select(time, nace_r2, values) %>% 
+  spread(nace_r2, values) %>% 
+  arrange(desc(time)) %>% 
+  head(12)
+
+kable(ind_tab2,
+      format = "pandoc",
+      digits = 2,
+      caption = "Produção Industrial, EA, Setores, Crescimento YoY")
+
+ind_tab3 <- 
+  ind_base %>% 
+  filter(geo == "EU28") %>%
+  filter(unit == "PCH_PRE") %>% #comparação com o mês anterior
+  filter(nace_r2 == "MIG_CAG" 
+         |nace_r2 == "MIG_COG"
+         |nace_r2 == "MIG_DCOG"
+         |nace_r2 == "MIG_NDCOG"
+         |nace_r2 == "C"
+         |nace_r2 == "MIG_DCOG"
+         |nace_r2 == "MIG_NRG_X_E"
+         |nace_r2 == "B-D") %>%
+  filter(time > "2015-10-01") %>% 
+  select(time, nace_r2, values) %>% 
+  spread(nace_r2, values) %>% 
+  arrange(desc(time)) %>% 
+  head(12)
+
+kable(ind_tab3,
+      format = "pandoc",
+      digits = 2,
+      caption = "Produção Industrial, UE, Setores, Crescimento MoM")
+
+ind_tab4 <- 
+  ind_base %>% 
+  filter(geo == "EA19") %>%
+  filter(unit == "PCH_PRE") %>% #comparação com o mês anterior
+  filter(nace_r2 == "MIG_CAG" 
+         |nace_r2 == "MIG_COG"
+         |nace_r2 == "MIG_DCOG"
+         |nace_r2 == "MIG_NDCOG"
+         |nace_r2 == "C"
+         |nace_r2 == "MIG_DCOG"
+         |nace_r2 == "MIG_NRG_X_E"
+         |nace_r2 == "B-D") %>%
+  filter(time > "2015-10-01") %>% 
+  select(time, nace_r2, values) %>% 
+  spread(nace_r2, values)%>% 
+  arrange(desc(time)) %>% 
+  head(12)
+
+kable(ind_tab4,
+      format = "pandoc",
+      digits = 2,
+      caption = "Produção Industrial, EA, Setores, Crescimento MoM")
+
+```
+
+## Vendas no varejo 
+
+```{r Varejo}
+
+ret_base <- get_eurostat("sts_trtu_m")
+
+ret_hist <- 
+  ret_base %>%
+  subset(nace_r2 == "G47" & indic_bt == "TOVV" & s_adj == "SCA" & unit == "I10") %>%
+  subset(geo == "EU28" | geo == "EA19") %>% 
+  filter(time > "2008-11-01")
+
+ret_plot <- ggplot(data = ret_hist, aes(x=time, y=values, colour = geo)) +
+  geom_line()
+
+ret_plot
+
+ret_tab1 <- 
+  ret_base %>% 
+  filter(geo == "EA19" | geo == "EU28") %>%
+  filter(unit == "PCH_PRE") %>% #comparação com o mês anterior
+  filter(indic_bt == "TOVV") %>% 
+  filter(nace_r2 == "G47") %>%
+  filter(time > "2015-10-01") %>% 
+  select(time, geo, values) %>% 
+  spread(geo, values) %>% 
+  arrange(desc(time)) %>% 
+  head(12)
+
+kable(ret_tab1,
+      format = "pandoc",
+      digits = 2,
+      caption = "Vendas no Varejo, Crescimento MoM")
+
+ret_tab2 <- 
+  ret_base %>% 
+  filter(geo == "EA19" | geo == "EU28") %>%
+  filter(unit == "PCH_SM") %>% #comparação com o mesmo mês do ano anterior
+  filter(indic_bt == "TOVV") %>% 
+  filter(nace_r2 == "G47") %>%
+  filter(time > "2015-10-01") %>% 
+  select(time, geo, values) %>% 
+  spread(geo, values) %>% 
+  arrange(desc(time)) %>% 
+  head(12)
+
+kable(ret_tab2,
+      format = "pandoc",
+      digits = 2,
+      caption = "Vendas no Varejo, Crescimento YoY")
+```
+
+## Desemprego
+
+```{r desemprego}
+emp_base <- get_eurostat("une_rt_m")
+
+emp_tab1 <- 
+  emp_base %>% 
+  filter(unit == "PC_ACT") %>% #comparação com o mês anterior
+  filter(age == "TOTAL") %>% 
+  filter(sex == "T") %>%
+  filter(s_adj == "SA") %>%
+  filter(time > "2015-10-01") %>% 
+  select(time, geo, values) %>% 
+  spread(geo, values) %>% 
+  arrange(desc(time)) %>% 
+  head(14)
+
+kable(emp_tab1,
+      format = "pandoc",
+      digits = 2,
+      caption = "Desemprego, MoM")
+
+emp_tab2 <- 
+  emp_base %>% 
+  filter(unit == "PC_ACT") %>% #comparação com o mês anterior
+  filter(age == "Y_LT25") %>% # jovens
+  filter(sex == "T") %>%
+  filter(s_adj == "SA") %>%
+  filter(time > "2015-10-01") %>% 
+  select(time, geo, values) %>% 
+  spread(geo, values) %>% 
+  arrange(desc(time)) %>% 
+  head(14)
+
+kable(emp_tab2,
+      format = "pandoc",
+      digits = 2,
+      caption = "Desemprego (jovens), MoM")
+```
+
+## Inflação 
+
+```{r inflação}
+
+ipc_base <- get_eurostat("prc_hicp_manr", select_time = "M") # AVISO: essa linha demora rodar
+
+ipc_set <- 
+  ipc_base %>% 
+  filter(geo == "EA") %>% 
+  filter(coicop == "FOOD"  
+        |coicop == "NRG" 
+        |coicop == "SERV"
+        |coicop == "CP00" 
+        |coicop == "TOT_X_NRG") %>% 
+  head(15)
+
+
+ipc_plot <- 
+  ggplot(data=ipc_set, aes(x=time,y=values,fill=coicop)) +
+  scale_fill_manual(values = cbPalette, labels = c(
+    "Total","Alimentação","Energia","Serviços","Total ex-energia")) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(legend.title=element_blank()) +
+  labs(x="",y="")+
+  # scale_x_continuous(breaks = c(0.0,1.0,2.0,3.0,4.0)) +
+  coord_flip()
+
+ipc_plot
+
+ipc_hist <- 
+  ipc_base %>% 
+  subset(geo == "EA" & (coicop == "CP00" | coicop == "TOT_X_NRG_FOOD")) %>% 
+  head(18)
+
+ipc_plot2 <- 
+  ggplot(data=ipc_hist, aes(x=time,y=values,fill=coicop)) +
+  scale_fill_manual(values = cbPalette, labels = c("Inflação Total","Núcleo da Inflação")) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(legend.title=element_blank(), legend.position = "bottom") +
+  labs(x="",y="") 
+# scale_x_continuous(breaks = c(0.0,1.0,2.0,3.0,4.0)) +
+# coord_flip()
+
+ipc_plot2
+
+ipc_set2 <- 
+  ipc_base %>% 
+  filter(geo == "EA") %>% 
+  filter(coicop == "FOOD"  
+         |coicop == "NRG" 
+         |coicop == "SERV"
+         |coicop == "CP00" 
+         |coicop == "TOT_X_NRG") %>% 
+  filter(time > "2015-10-01") %>% 
+  select(time, coicop, values) %>% 
+  spread(coicop, values) %>% 
+  arrange(desc(time)) %>% 
+  head(12)
+
+kable(ipc_set2,
+      format = "pandoc",
+      digits = 2,
+      caption = "Inflação, EA")
+```
+
+## Balanço de Pagamentos (EA)
+
+```{r bop}
+bop_base <- get_eurostat("bop_eu6_m", select_time = "M") 
+
+bop_bar <- 
+  bop_base %>% 
+  filter(bop_item == "G" 
+         | bop_item == "S" 
+         | bop_item == "IN1" 
+         | bop_item == "IN2") %>% 
+  filter(geo == "EA19") %>% 
+  filter(partner == "EXT_EA19") %>% 
+  filter(stk_flow == "BAL") %>% 
+  filter(sector10 == "S1") %>% 
+  filter(sectpart == "S1") %>% 
+  filter(s_adj == "SCA") %>% 
+  mutate(values = values / 1000) %>% 
+  select(time, bop_item, values) %>% 
+  head(48)
+
+bop_line <- 
+  bop_base %>% 
+  filter(bop_item == "CA") %>% 
+  filter(geo == "EA19") %>% 
+  filter(partner == "EXT_EA19") %>% 
+  filter(stk_flow == "BAL") %>% 
+  filter(sector10 == "S1") %>% 
+  filter(sectpart == "S1") %>% 
+  filter(s_adj == "SCA") %>% 
+  mutate(values = values / 1000) %>% 
+  select(time, bop_item, values) %>% 
+  head(12)
+
+# Cria o objeto do gráfico 7.2
+
+bme72 <- 
+  ggplot() +
+  geom_bar(data = bop_bar, 
+           aes(y=values, x=time, fill=bop_item), 
+           stat = "identity") +
+  scale_fill_manual(labels=c("Bens","R. Primária", 
+                             "R. Secundária",
+                             "Serviços"), 
+                    values = cbPalette) +
+  geom_line(aes(y=values, x=time, colour = bop_item), 
+            data = bop_line, 
+            stat = "identity", 
+            group = 1, 
+            size = 1.5) +
+  theme(legend.position="right", 
+        legend.title = element_blank()) +
+  labs(x="",
+       y="EUR bilhões") +
+  scale_color_manual(labels = "Conta corrente",values ="#000000" ) 
+
+bme72 
+
+bop_table <- 
+  bop_bar %>% 
+  full_join(bop_line) %>% 
+  spread(bop_item, values) 
+
+kable(bop_table,
+      format = "pandoc",
+      digits = 2,
+      caption = "Balanço de Pagamentos")
+```
+
+## Câmbio
+
+```{r cambio}
+
+hoje = format(Sys.Date(), "%d/%m/%Y")
+file.euro = paste0("https://ptax.bcb.gov.br/ptax_internet/consultaBoletim.do?method=gerarCSVFechamentoMoedaNoPeriodo&ChkMoeda=222&DATAINI=03/01/2015&DATAFIM=",hoje)
+file.iene = paste0("https://ptax.bcb.gov.br/ptax_internet/consultaBoletim.do?method=gerarCSVFechamentoMoedaNoPeriodo&ChkMoeda=101&DATAINI=03/01/2015&DATAFIM=",hoje)
+file.libra = paste0("https://ptax.bcb.gov.br/ptax_internet/consultaBoletim.do?method=gerarCSVFechamentoMoedaNoPeriodo&ChkMoeda=115&DATAINI=03/01/2015&DATAFIM=",hoje)
+
+dir.create("dados")
+download.file(file.libra, "./dados/libra.csv")
+download.file(file.iene, "./dados/iene.csv")
+download.file(file.euro, "./dados/euro.csv")
+
+cur_base <- 
+  read_csv2("./dados/libra.csv", col_names = FALSE) %>% 
+  full_join(read_csv2("./dados/iene.csv", col_names = FALSE)) %>% 
+  full_join(read_csv2("./dados/euro.csv", col_names = FALSE)) %>% 
+  select(X1, X4:X8) %>% 
+  rename(data = X1) %>% 
+  rename(moeda = X4) %>% 
+  rename(LCU_BRL_c = X5) %>% 
+  rename(LCU_BRL_v = X6) %>% 
+  rename(LCU_USD_c = X7) %>% 
+  rename(LCU_USD_v = X8) %>% 
+  mutate(data = dmy(data)) %>% 
+  as_tbl_time(index = data)
+
+cur_table <- 
+  cur_base %>% 
+  group_by(moeda) %>% 
+  collapse_by("monthly") %>% 
+  group_by(data, add = TRUE) %>% 
+  summarise(mean = mean(LCU_USD_v)) %>% 
+  spread(moeda, mean) %>% 
+  arrange(desc(data)) %>% 
+  head(12)
+  
+kable(cur_table,
+      format = "pandoc",
+      digits = 2,
+      caption = "Taxas de Câmbio LCU/USD")
+
+cur_tab2 <- 
+  cur_base %>% 
+  group_by(moeda) %>% 
+  collapse_by("monthly") %>% 
+  group_by(data, add = TRUE) %>% 
+  summarise(mean = mean(LCU_USD_v)) %>% 
+  spread(moeda, mean) %>% 
+  mutate(EUR = 100 * ((EUR / lag(EUR, 1)) - 1)) %>% 
+  mutate(GBP = 100 * ((GBP / lag(GBP, 1)) - 1)) %>% 
+  mutate(JPY = 100 * ((JPY / lag(JPY, 1)) - 1)) %>% 
+  arrange(desc(data)) %>% 
+  head(12)
+
+kable(cur_tab2,
+      format = "pandoc",
+      digits = 2,
+      caption = "Variação do Câmbio MoM")
+
+```
+
+## Próximos passos 
+
+Descrever modo de uso/geração na descrição.
+Acertar legendas das tabelas, tirando códigos sem leitura óbvia.
